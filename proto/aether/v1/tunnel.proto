@@ -1,0 +1,123 @@
+// AetherL3-Tunnel Protocol Definition
+// Defines the gRPC service for bidirectional L3 packet streaming.
+
+syntax = "proto3";
+
+package aether.v1;
+
+option go_package = "github.com/aether-l3/aether/proto/aether/v1;aetherv1";
+
+// TunnelService provides bidirectional streaming of raw L3 (IP) packets
+// encapsulated within AetherFrame envelopes over gRPC (HTTP/2).
+service TunnelService {
+  // Bi-directional stream: client sends encapsulated IP packets,
+  // server responds with encapsulated IP packets from the TUN interface.
+  rpc Tunnel(stream AetherFrame) returns (stream AetherFrame);
+
+  // Unary RPC for connection handshake and authentication verification.
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
+
+  // Server-streaming RPC for real-time stats (optional monitoring).
+  rpc GetStats(StatsRequest) returns (stream StatsUpdate);
+}
+
+// AetherFrame wraps a single raw IP packet (IPv4 or IPv6) with metadata.
+message AetherFrame {
+  // Protocol version of the frame format. Current: 1.
+  uint32 version = 1;
+
+  // Unique session identifier for multiplexing multiple logical flows.
+  bytes session_id = 2;
+
+  // Sequence number for ordering and deduplication.
+  uint64 sequence = 3;
+
+  // The raw IP packet payload (IPv4 or IPv6, starting from IP header).
+  bytes packet_data = 4;
+
+  // IP protocol number hint (1=ICMP, 6=TCP, 17=UDP, 58=ICMPv6).
+  uint32 ip_protocol = 5;
+
+  // Timestamp in nanoseconds (sender's monotonic clock, informational).
+  int64 timestamp_ns = 6;
+
+  // Frame type discriminator.
+  FrameType frame_type = 7;
+}
+
+enum FrameType {
+  FRAME_TYPE_UNSPECIFIED = 0;
+  // Regular data frame carrying an IP packet.
+  FRAME_TYPE_DATA = 1;
+  // Keep-alive ping frame (no packet_data).
+  FRAME_TYPE_KEEPALIVE = 2;
+  // Keep-alive acknowledgment.
+  FRAME_TYPE_KEEPALIVE_ACK = 3;
+  // Session teardown signal.
+  FRAME_TYPE_CLOSE = 4;
+}
+
+// HandshakeRequest authenticates the client before tunnel establishment.
+message HandshakeRequest {
+  // Protocol version the client speaks.
+  uint32 protocol_version = 1;
+
+  // Authentication credential: PSK-derived HMAC or UUID token.
+  bytes auth_token = 2;
+
+  // Client capabilities bitmask (reserved for future extensions).
+  uint64 capabilities = 3;
+
+  // Requested MTU for the tunnel (default 1500).
+  uint32 requested_mtu = 4;
+
+  // Client identifier (informational, e.g. "AetherBox-android/1.0").
+  string client_id = 5;
+}
+
+// HandshakeResponse confirms or rejects the connection.
+message HandshakeResponse {
+  // Whether authentication succeeded.
+  bool accepted = 1;
+
+  // Human-readable rejection reason (if !accepted).
+  string reason = 2;
+
+  // Server-assigned session token for subsequent Tunnel calls.
+  bytes session_token = 3;
+
+  // Negotiated MTU.
+  uint32 negotiated_mtu = 4;
+
+  // Server capabilities bitmask.
+  uint64 capabilities = 5;
+
+  // Server-assigned tunnel IP address for the client (e.g. 10.0.0.2).
+  string tunnel_ip = 6;
+
+  // Server-assigned tunnel subnet prefix length.
+  uint32 tunnel_prefix_len = 7;
+
+  // IPv6 address assigned to client (if IPv6 enabled).
+  string tunnel_ip6 = 8;
+
+  uint32 tunnel_prefix_len6 = 9;
+}
+
+// StatsRequest queries real-time tunnel statistics.
+message StatsRequest {
+  bytes session_token = 1;
+}
+
+// StatsUpdate provides periodic tunnel statistics.
+message StatsUpdate {
+  int64 timestamp_ns = 1;
+  uint64 bytes_sent = 2;
+  uint64 bytes_received = 3;
+  uint64 packets_sent = 4;
+  uint64 packets_received = 5;
+  uint32 latency_ms = 6;
+  uint32 active_tcp_conns = 7;
+  uint32 active_udp_conns = 8;
+  uint32 active_icmp_conns = 9;
+}

@@ -1,0 +1,87 @@
+name: Build AAR (gomobile)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "mobile/**"
+      - "internal/client/**"
+      - "pkg/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/build-aar.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - "internal/client/**"
+      - "pkg/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/build-aar.yml"
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build-aar:
+    name: gomobile bind (android/arm, android/arm64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: false
+
+      - name: Install gomobile & gobind
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify unit tests
+        run: go test ./pkg/... ./internal/... -count=1
+
+      - name: gomobile init
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: gomobile init
+
+      - name: gomobile bind (ARM only)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          mkdir -p dist
+          gomobile bind \
+            -target=android/arm,android/arm64 \
+            -androidapi 26 \
+            -o dist/aether.aar \
+            ./mobile
+          ls -lh dist/
+
+      - name: Upload AAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aether-aar
+          path: dist/aether.aar
+          retention-days: 30
+
+      - name: Attach AAR to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/aether.aar
+          fail_on_unmatched_files: true
