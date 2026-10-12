@@ -5,6 +5,7 @@ bin/
 *.so
 *.dylib
 *.aar
+!app/libs/aether.aar
 
 # Go
 *.test
