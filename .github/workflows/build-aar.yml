@@ -37,6 +37,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Setup Android SDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" "platforms;android-34" "platform-tools" >/dev/null
+
       - name: Setup Android NDK
         id: setup-ndk
         uses: nttld/setup-ndk@v1
@@ -56,13 +60,11 @@ jobs:
       - name: gomobile init
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: gomobile init
 
       - name: gomobile bind (ARM only)
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           mkdir -p dist
           gomobile bind \
